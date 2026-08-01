@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ThemeToggle } from './components'
 import {
   DEDUCTION_GROUP,
   EMPTY_FORM,
@@ -114,24 +115,27 @@ function App() {
             (AY 2026-27).
           </p>
         </div>
-        <fieldset className="regime-toggle">
-          <legend className="visually-hidden">Tax regime</legend>
-          {REGIME_OPTIONS.map((option) => (
-            <label
-              key={option}
-              className={option === regime ? 'is-selected' : undefined}
-            >
-              <input
-                type="radio"
-                name="tax-regime"
-                value={option}
-                checked={option === regime}
-                onChange={() => setRegime(option)}
-              />
-              {REGIME_LABEL[option]}
-            </label>
-          ))}
-        </fieldset>
+        <div className="header-controls">
+          <fieldset className="regime-toggle">
+            <legend className="visually-hidden">Tax regime</legend>
+            {REGIME_OPTIONS.map((option) => (
+              <label
+                key={option}
+                className={option === regime ? 'is-selected' : undefined}
+              >
+                <input
+                  type="radio"
+                  name="tax-regime"
+                  value={option}
+                  checked={option === regime}
+                  onChange={() => setRegime(option)}
+                />
+                {REGIME_LABEL[option]}
+              </label>
+            ))}
+          </fieldset>
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="layout">

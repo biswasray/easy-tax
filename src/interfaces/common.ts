@@ -43,3 +43,14 @@ export type BreakdownRow = {
 
 /** The form's raw text state: digits as typed, before parsing to numbers. */
 export type FormState = Record<AmountField, string>
+
+export type Theme = 'light' | 'dark'
+
+export type ThemeContextValue = {
+  /** The theme in effect, whether chosen explicitly or inherited from the OS. */
+  theme: Theme
+  setTheme: (theme: Theme) => void
+  toggleTheme: () => void
+  /** True while no explicit choice is stored, i.e. the OS is still in charge. */
+  isSystemTheme: boolean
+}
