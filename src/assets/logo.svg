@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="easy-tax">
   <defs>
-    <linearGradient id="easy-tax-mark" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="easy-tax-logo" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#c084fc" />
       <stop offset="1" stop-color="#9a2bff" />
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="7.5" fill="url(#easy-tax-mark)" />
+  <rect width="32" height="32" rx="7.5" fill="url(#easy-tax-logo)" />
   <g
     transform="translate(5 5)"
     fill="none"

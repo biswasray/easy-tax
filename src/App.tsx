@@ -6,6 +6,7 @@ import {
   type TaxDataOptionType,
   type TaxRegime,
 } from './utils'
+import logo from './assets/logo.svg'
 import './App.css'
 
 /** Every amount field, i.e. everything except the regime and the age flag. */
@@ -339,7 +340,10 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div>
-          <h1>easy-tax</h1>
+          <h1>
+            <img className="logo" src={logo} alt="" width="40" height="40" />
+            easy-tax
+          </h1>
           <p>
             Income-tax estimate for a resident individual under 60, FY 2025-26
             (AY 2026-27).
