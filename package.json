@@ -11,7 +11,8 @@
     "format:check": "prettier --check .",
     "sync:readme": "node scripts/sync-readme.mjs",
     "sync:readme:check": "node scripts/sync-readme.mjs --check",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "npm run sync:readme && npm run format:check && npm run lint"
   },
   "dependencies": {
     "react": "^19.2.8",
