@@ -19,6 +19,9 @@ jobs:
   verify:
     name: Lint, format & build
     runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.version.outputs.should-deploy }}
+      version: ${{ steps.version.outputs.package }}
     steps:
       - uses: actions/checkout@v5
 
@@ -38,16 +41,65 @@ jobs:
       # `yarn build` is `tsc -b && vite build`, so this typechecks too.
       - run: yarn build
 
-      - name: Upload Pages artifact
+      # The built site carries its own version.json. Comparing package.json
+      # against the copy already live means a failed or skipped deploy simply
+      # leaves the live version behind, and the next run picks it up again.
+      - name: Compare version with the live site
+        id: version
         if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+
+          package=$(jq -r '.version' package.json)
+          url="https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/version.json"
+
+          live=""
+          if body=$(curl -fsSL --max-time 30 "$url"); then
+            live=$(printf '%s' "$body" | jq -r '.version // empty')
+          fi
+
+          if [ -z "$live" ]; then
+            live="0.0.0"
+            echo "No version.json live yet — treating the site as $live."
+          fi
+
+          if [ "$package" = "$live" ]; then
+            should=false
+            reason="unchanged from the live site"
+          elif [ "$(printf '%s\n%s\n' "$package" "$live" | sort -V | tail -n1)" = "$package" ]; then
+            should=true
+            reason="newer than the live site"
+          else
+            should=false
+            reason="older than the live site"
+          fi
+
+          echo "should-deploy=$should" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "| | Version |"
+            echo "| --- | --- |"
+            echo "| package.json | \`$package\` |"
+            echo "| Live site | \`$live\` |"
+            echo ""
+            if [ "$should" = true ]; then
+              echo "Deploying — package.json is $reason."
+            else
+              echo "Skipping deploy — package.json is $reason. Bump the version to release."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Pages artifact
+        if: steps.version.outputs.should-deploy == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy v${{ needs.verify.outputs.version }} to GitHub Pages
     needs: verify
-    if: github.event_name != 'pull_request'
+    if: needs.verify.outputs.should-deploy == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write

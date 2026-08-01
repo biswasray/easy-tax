@@ -36,6 +36,29 @@ build with `VITE_BASE=/` instead.
 
 One-time setup: **Settings → Pages → Source: GitHub Actions**.
 
+### Releasing
+
+A deploy only happens when the version has gone up. The build writes its
+`package.json` version into `dist/version.json`, and CI compares that against
+the copy already live at `/easy-tax/version.json`:
+
+| package.json | Live site | Result                               |
+| ------------ | --------- | ------------------------------------ |
+| `1.0.1`      | `1.0.0`   | Deploys                              |
+| `1.0.0`      | `1.0.0`   | Builds and verifies, skips deploying |
+| `1.0.0`      | _absent_  | Deploys — treated as a first release |
+
+So to ship a change, bump the version:
+
+```bash
+yarn version --new-version patch   # or minor / major
+```
+
+Pushes that do not bump the version still run the full lint, format and build
+checks and go green — they just don't publish. Because the comparison is against
+what is actually live rather than against the previous commit, a deploy that
+fails or is skipped is picked up again by the next run.
+
 `yarn.lock` is not committed, so CI resolves dependency versions fresh on every
 run. A build can therefore pick up a new release of a dependency that was never
 built locally.
