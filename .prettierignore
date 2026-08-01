@@ -1,0 +1,7 @@
+dist
+node_modules
+.claude
+public
+yarn.lock
+*.svg
+*.png
