@@ -83,11 +83,18 @@ export type TaxCalculationResult = {
     cryptoGain: number
     beforeRebate: number
   }
+  /** Section 87A rebate. Zero once total income passes the threshold. */
   rebate87A: number
+  /**
+   * Section 87A marginal relief, which replaces the rebate just above the
+   * ₹12,00,000 threshold. New regime only — the old regime is a hard cliff.
+   */
+  marginalRelief87A: number
   taxAfterRebate: number
   surchargeRate: number
   surcharge: number
-  marginalRelief: number
+  /** Relief for crossing a surcharge threshold. Unrelated to 87A. */
+  surchargeMarginalRelief: number
   cess: number
   /** Rounded to the nearest ₹10 as required by section 288B. */
   totalTaxPayable: number
@@ -220,6 +227,8 @@ type CoreTax = {
   stcgTax: number
   cryptoTax: number
   taxBeforeRebate: number
+  /** The part of the tax that section 87A is allowed to reduce. */
+  rebatableTax: number
   rebate: number
   taxAfterRebate: number
   exemptionUsedAgainstSpecialIncome: number
@@ -253,21 +262,16 @@ const computeCoreTax = (buckets: IncomeBuckets, regime: TaxRegime): CoreTax => {
     buckets.slab + buckets.ltcg + buckets.stcg + buckets.crypto
   const { incomeLimit, maxRebate } = REBATE_87A[regime]
 
-  // The rebate is allowed against tax on ordinary income only. Under the old
-  // regime section 111A gains also qualify; 112A gains and crypto never do.
+  // Whichever relief applies, it can only wipe out tax charged at the slab
+  // rates. Under the old regime section 111A gains also qualify; 112A gains
+  // and crypto never do.
   const rebatableTax = regime === 'old' ? slabTax + stcgTax : slabTax
 
-  let rebate = 0
-  if (totalIncome <= incomeLimit) {
-    rebate = Math.min(rebatableTax, maxRebate)
-  } else if (regime === 'new') {
-    // Marginal relief: tax on ordinary income cannot exceed the amount by which
-    // total income overshoots the rebate threshold. Self-limiting, since the
-    // top marginal rate is well under 100%.
-    rebate = atLeastZero(rebatableTax - (totalIncome - incomeLimit))
-  }
-
-  rebate = round2(Math.min(rebate, rebatableTax))
+  // Past the threshold the rebate is gone outright. What replaces it is
+  // marginal relief, and that is deliberately not computed here: it caps the
+  // final bill including cess, so calculateTax applies it at the very end.
+  const rebate =
+    totalIncome <= incomeLimit ? round2(Math.min(rebatableTax, maxRebate)) : 0
 
   return {
     slabs: slabRows,
@@ -276,6 +280,7 @@ const computeCoreTax = (buckets: IncomeBuckets, regime: TaxRegime): CoreTax => {
     stcgTax,
     cryptoTax,
     taxBeforeRebate,
+    rebatableTax,
     rebate,
     taxAfterRebate: round2(taxBeforeRebate - rebate),
     exemptionUsedAgainstSpecialIncome: round2(
@@ -427,23 +432,52 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
 
   // Marginal relief caps the extra tax at the extra income earned over the
   // surcharge threshold.
-  let marginalRelief = 0
+  let surchargeMarginalRelief = 0
   if (band && surcharge > 0) {
     const taxAtThreshold = computeCoreTax(
       reduceIncomeTo(buckets, band.above),
       regime,
     ).taxAfterRebate
     const ceiling = taxAtThreshold + (totalIncome - band.above)
-    marginalRelief = round2(
+    surchargeMarginalRelief = round2(
       atLeastZero(core.taxAfterRebate + surcharge - ceiling),
     )
   }
 
   const taxPlusSurcharge = atLeastZero(
-    round2(core.taxAfterRebate + surcharge - marginalRelief),
+    round2(core.taxAfterRebate + surcharge - surchargeMarginalRelief),
   )
   const cess = round2(taxPlusSurcharge * CESS_RATE)
-  const totalTaxPayable = roundToNearestTen(taxPlusSurcharge + cess)
+  const totalBeforeRelief = round2(taxPlusSurcharge + cess)
+
+  /*
+   * Section 87A marginal relief, applied last because it caps the bill the
+   * taxpayer actually writes a cheque for — cess included. Someone whose total
+   * income crosses ₹12,00,000 by ₹50,000 must never pay more than ₹50,000 of
+   * extra tax, so the whole ₹70,200 figure is what gets capped, not the
+   * ₹67,500 sitting underneath it.
+   *
+   * The floor stops the relief reaching tax that section 87A cannot touch:
+   * capital gains and crypto keep their own tax, grossed up for cess.
+   */
+  let marginalRelief87A = 0
+  const { incomeLimit } = REBATE_87A[regime]
+
+  if (regime === 'new' && totalIncome > incomeLimit) {
+    const overshoot = totalIncome - incomeLimit
+    const untouchableTax = round2(
+      (core.taxBeforeRebate - core.rebatableTax) * (1 + CESS_RATE),
+    )
+    const capped = Math.max(
+      Math.min(totalBeforeRelief, overshoot),
+      untouchableTax,
+    )
+    marginalRelief87A = round2(atLeastZero(totalBeforeRelief - capped))
+  }
+
+  const totalTaxPayable = roundToNearestTen(
+    atLeastZero(totalBeforeRelief - marginalRelief87A),
+  )
 
   return {
     taxRegime: regime,
@@ -471,7 +505,8 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
     taxAfterRebate: core.taxAfterRebate,
     surchargeRate,
     surcharge,
-    marginalRelief,
+    marginalRelief87A,
+    surchargeMarginalRelief,
     cess,
     totalTaxPayable,
     effectiveTaxRate:

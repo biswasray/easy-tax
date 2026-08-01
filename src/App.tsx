@@ -199,10 +199,19 @@ function App() {
             </p>
             <p className="total-meta">
               {REGIME_LABEL[regime]}
-              {hasIncome
-                ? ` · ${formatPercent(result.effectiveTaxRate)} of gross income`
-                : ' · enter your income to begin'}
+              {hasIncome ? '' : ' · enter your income to begin'}
             </p>
+            {hasIncome && (
+              <div className="effective-rate">
+                <span>
+                  Effective tax rate
+                  <small>
+                    of {formatCurrency(result.grossTotalIncome)} gross
+                  </small>
+                </span>
+                <strong>{formatPercent(result.effectiveTaxRate)}</strong>
+              </div>
+            )}
           </div>
 
           {hasIncome && saving !== 0 && (

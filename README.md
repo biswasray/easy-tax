@@ -101,8 +101,15 @@ against capital gains or crypto taxed at special rates.
   higher, so absorbing it first minimises the bill). Crypto is excluded, as
   s.115BBH requires.
 - Rebate u/s 87A — ₹60,000 up to ₹12L of total income under the new regime,
-  ₹12,500 up to ₹5L under the old — with new-regime marginal relief just above
-  the threshold, and no rebate against LTCG or crypto.
+  ₹12,500 up to ₹5L under the old. No rebate against LTCG or crypto, and none
+  against 111A short-term gains under the new regime.
+- Marginal relief u/s 87A once the new regime's ₹12L threshold is passed: the
+  rebate is gone, but the tax payable is limited to the amount by which total
+  income overshoots ₹12,00,000, so a raise can never cost more in tax than it
+  added in income. Applied last, to the final bill **including cess** — total
+  income of ₹12,50,000 pays ₹50,000, not ₹67,500 plus cess. It stops short of
+  tax on capital gains and crypto, which section 87A cannot touch. The old
+  regime has no equivalent: ₹5L is a hard cliff.
 - Surcharge at 10/15/25% (plus 37% over ₹5cr in the old regime), with the 15%
   cap on the part attributable to 111A, 112A and dividend income.
 - Marginal relief where crossing a surcharge threshold would otherwise cost

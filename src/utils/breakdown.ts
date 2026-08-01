@@ -62,8 +62,8 @@ export const buildBreakdown = (
     note: formatRate(result.surchargeRate),
   },
   {
-    label: 'Marginal relief',
-    value: result.marginalRelief,
+    label: 'Marginal relief on surcharge',
+    value: result.surchargeMarginalRelief,
     negative: true,
     hideWhenZero: true,
   },
@@ -72,5 +72,13 @@ export const buildBreakdown = (
     value: result.cess,
     hideWhenZero: true,
     note: '4%',
+  },
+  // Last, because it caps the final bill with cess already in it.
+  {
+    label: 'Marginal relief u/s 87A',
+    value: result.marginalRelief87A,
+    negative: true,
+    hideWhenZero: true,
+    note: 'caps tax at income above ₹12L',
   },
 ]
