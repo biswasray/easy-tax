@@ -102,6 +102,15 @@ export type TaxCalculationResult = {
   effectiveTaxRate: number
 }
 
+/**
+ * The financial year every rate in this file belongs to, identified by the
+ * calendar year it starts in — 2025 means FY 2025-26 / AY 2026-27. The UI
+ * labels itself from this, so bumping the rates below and bumping this
+ * constant is what moves the app to a new year. Never derive the displayed
+ * year from the clock alone: the label would advance while the rates did not.
+ */
+export const RATE_FINANCIAL_YEAR_START = 2025
+
 const CESS_RATE = 0.04
 
 /** Section 112A: listed equity / equity mutual fund long-term gains. */

@@ -15,14 +15,21 @@ import {
   DEDUCTION_LIMITS,
   formatCurrency,
   formatInputValue,
+  formatFinancialYear,
   formatPercent,
   formatRate,
+  formatTaxYear,
+  getFinancialYearStart,
   parseInputValue,
+  RATE_FINANCIAL_YEAR_START,
   slabLabel,
   type TaxRegime,
 } from './utils'
 import logo from './assets/logo.svg'
 import './App.css'
+
+/** Read once per mount: the year only turns over on 1 April. */
+const currentFinancialYear = getFinancialYearStart()
 
 function App() {
   const [regime, setRegime] = useState<TaxRegime>('new')
@@ -111,9 +118,15 @@ function App() {
             easy-tax
           </h1>
           <p>
-            Income-tax estimate for a resident individual under 60, FY 2025-26
-            (AY 2026-27).
+            Income-tax estimate for a resident individual under 60,{' '}
+            {formatTaxYear(RATE_FINANCIAL_YEAR_START)}.
           </p>
+          {currentFinancialYear > RATE_FINANCIAL_YEAR_START && (
+            <p className="year-note">
+              Today falls in {formatFinancialYear(currentFinancialYear)}, whose
+              rates are not in this build yet.
+            </p>
+          )}
         </div>
         <div className="header-controls">
           <fieldset className="regime-toggle">

@@ -1,9 +1,10 @@
 # easy-tax
 
-An Indian income-tax calculator for **FY 2025-26 (AY 2026-27)**. Enter what you
-earned, pick a regime, and see the tax broken down line by line — including the
-bits most calculators hide, like which slab your income actually filled, why
-your surcharge went down, and what the other regime would have cost you.
+An Indian income-tax calculator for <!-- tax-year:start -->**FY 2025-26 (AY 2026-27)**<!-- tax-year:end -->.
+Enter what you earned, pick a regime, and see the tax broken down line by line —
+including the bits most calculators hide, like which slab your income actually
+filled, why your surcharge went down, and what the other regime would have cost
+you.
 
 Built with React 19, TypeScript and Vite.
 
@@ -22,6 +23,24 @@ yarn dev
 | `yarn lint`         | ESLint                                     |
 | `yarn format`       | Format everything with Prettier            |
 | `yarn format:check` | Verify formatting without writing (for CI) |
+| `yarn sync:readme`  | Refresh the generated year fields below    |
+
+### Generated fields
+
+Markdown cannot compute anything when GitHub renders it, so the two dated
+fields in this file are written in by
+[`scripts/sync-readme.mjs`](scripts/sync-readme.mjs) and committed. Each sits
+between HTML comment markers that are invisible once rendered:
+
+| Region      | Source                                            |
+| ----------- | ------------------------------------------------- |
+| `tax-year`  | `RATE_FINANCIAL_YEAR_START` in `src/utils/tax.ts` |
+| `copyright` | The current calendar year                         |
+
+The tax year deliberately follows the rates rather than the clock, so this file
+can never claim a year the calculator does not implement. CI runs
+`yarn sync:readme:check` and fails if either has drifted — including on 1
+January, when the copyright year turns over. Run `yarn sync:readme` and commit.
 
 ## Deployment
 
@@ -119,7 +138,15 @@ against capital gains or crypto taxed at special rates.
 ## Assumptions
 
 The calculator is built for one taxpayer profile, and the rates are named
-constants at the top of `src/utils/tax.ts` so they are easy to bump each year:
+constants at the top of `src/utils/tax.ts` so they are easy to bump each year.
+
+`RATE_FINANCIAL_YEAR_START` in that file records which year those rates belong
+to, and the header labels itself from it — so the displayed FY and AY can never
+drift away from the rates in use. To roll the app forward, update the rates and
+that one constant together. Until then the app compares the constant against
+today's date and says plainly that the current year's rates are not in yet.
+
+Other assumptions:
 
 - Resident individual **under 60** — no senior-citizen slabs.
 - Deductions are limited to 80C and 80D. HRA, LTA, 80CCD(1B), 80E, 80G, 24(b)
@@ -148,3 +175,7 @@ result.totalIncome // 775000
 result.totalTaxPayable // 70200
 result.deductions.section80C // { claimed: 150000, allowed: 150000, limit: 150000 }
 ```
+
+---
+
+Copyright © <!-- copyright:start -->2026<!-- copyright:end -->

@@ -52,6 +52,13 @@
     font-size: 15px;
   }
 
+  .year-note {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 135%;
+    color: var(--accent);
+  }
+
   @media (max-width: 1024px) {
     padding: 24px 20px;
     gap: 16px;

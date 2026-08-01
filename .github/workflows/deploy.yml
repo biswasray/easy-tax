@@ -38,6 +38,11 @@ jobs:
 
       - run: yarn format:check
 
+      # Fails if README.md's generated regions have drifted — from a rate-year
+      # bump, or simply from the calendar rolling over. Fix with
+      # `yarn sync:readme` and commit.
+      - run: yarn sync:readme:check
+
       # `yarn build` is `tsc -b && vite build`, so this typechecks too.
       - run: yarn build
 
