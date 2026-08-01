@@ -23,6 +23,23 @@ yarn dev
 | `yarn format`       | Format everything with Prettier            |
 | `yarn format:check` | Verify formatting without writing (for CI) |
 
+## Deployment
+
+Pushing to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml),
+which lints, checks formatting, typechecks, builds, and publishes `dist/` to
+GitHub Pages at **https://biswasray.github.io/easy-tax/**. Pull requests run the
+same checks without deploying.
+
+Because a project site is served from a subpath, `vite.config.ts` builds with
+`base: '/easy-tax/'`. On a custom domain or a `<user>.github.io` repository,
+build with `VITE_BASE=/` instead.
+
+One-time setup: **Settings → Pages → Source: GitHub Actions**.
+
+`yarn.lock` is not committed, so CI resolves dependency versions fresh on every
+run. A build can therefore pick up a new release of a dependency that was never
+built locally.
+
 ## What it works out
 
 All the logic lives in [`src/utils/tax.ts`](src/utils/tax.ts) as a single pure
