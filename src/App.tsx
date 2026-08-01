@@ -1,267 +1,32 @@
 import { useMemo, useState } from 'react'
 import {
+  DEDUCTION_GROUP,
+  EMPTY_FORM,
+  FIELD_KEYS,
+  INCOME_GROUPS,
+  REGIME_LABEL,
+  REGIME_OPTIONS,
+} from './constants'
+import type { AmountField, FieldConfig, FormState } from './interfaces'
+import {
+  buildBreakdown,
   calculateTax,
   DEDUCTION_LIMITS,
-  type TaxCalculationResult,
-  type TaxDataOptionType,
+  formatCurrency,
+  formatInputValue,
+  formatPercent,
+  formatRate,
+  parseInputValue,
+  slabLabel,
   type TaxRegime,
 } from './utils'
 import logo from './assets/logo.svg'
 import './App.css'
 
-/** Every amount field, i.e. everything except the regime and the age flag. */
-type AmountField = {
-  [K in keyof TaxDataOptionType]-?: TaxDataOptionType[K] extends
-    number | undefined
-    ? K
-    : never
-}[keyof TaxDataOptionType]
-
-type FieldConfig = {
-  key: AmountField
-  label: string
-  /** How this bucket is taxed, shown under the input. */
-  hint: string
-  /** Business/other income can be a loss and set off against other income. */
-  allowNegative?: boolean
-  /** Statutory ceiling, for deduction fields. */
-  getLimit?: (seniorParents: boolean) => number
-}
-
-const INCOME_GROUPS: { title: string; fields: FieldConfig[] }[] = [
-  {
-    title: 'Salary & other income',
-    fields: [
-      {
-        key: 'salaryIncomeAnnually',
-        label: 'Salary',
-        hint: 'Slab rates, after standard deduction',
-      },
-      {
-        key: 'fdInterestIncomeAnnually',
-        label: 'FD & savings interest',
-        hint: 'Slab rates',
-      },
-      {
-        key: 'dividendIncomeAnnually',
-        label: 'Dividend',
-        hint: 'Slab rates, surcharge capped at 15%',
-      },
-      {
-        key: 'otherIncomeAnnually',
-        label: 'Other income',
-        hint: 'Slab rates',
-        allowNegative: true,
-      },
-    ],
-  },
-  {
-    title: 'Capital gains',
-    fields: [
-      {
-        key: 'longTermCapitalGainAnnually',
-        label: 'Long-term capital gain',
-        hint: '12.5% above ₹1.25L exempt · s.112A',
-      },
-      {
-        key: 'shortTermCapitalGainAnnually',
-        label: 'Short-term capital gain',
-        hint: '20% · s.111A',
-      },
-      {
-        key: 'cryptoGainIncomeAnnually',
-        label: 'Crypto & VDA gain',
-        hint: 'Flat 30%, no deductions · s.115BBH',
-      },
-    ],
-  },
-  {
-    title: 'Trading & business',
-    fields: [
-      {
-        key: 'intradayTradingIncomeAnnually',
-        label: 'Intraday trading',
-        hint: 'Speculative business · slab rates',
-        allowNegative: true,
-      },
-      {
-        key: 'equityFnoTradingIncomeAnnually',
-        label: 'Equity F&O',
-        hint: 'Non-speculative business · slab rates',
-        allowNegative: true,
-      },
-      {
-        key: 'commodityFnoTradingIncomeAnnually',
-        label: 'Commodity F&O',
-        hint: 'Non-speculative business · slab rates',
-        allowNegative: true,
-      },
-    ],
-  },
-]
-
-const DEDUCTION_GROUP: { title: string; fields: FieldConfig[] } = {
-  title: 'Deductions — chapter VI-A',
-  fields: [
-    {
-      key: 'section80CAnnually',
-      label: 'Section 80C',
-      hint: 'EPF, PPF, ELSS, life-insurance premium, home-loan principal, children’s tuition fees, 5-year FD, Sukanya Samriddhi.',
-      getLimit: () => DEDUCTION_LIMITS.section80C,
-    },
-    {
-      key: 'section80DSelfFamilyAnnually',
-      label: 'Section 80D — self, spouse & children',
-      hint: 'Health-insurance premium for your own family, including up to ₹5,000 of preventive health check-ups.',
-      getLimit: () => DEDUCTION_LIMITS.section80DSelfFamily,
-    },
-    {
-      key: 'section80DParentsAnnually',
-      label: 'Section 80D — parents',
-      hint: 'Health-insurance premium paid for your parents, whether or not they are dependent on you.',
-      getLimit: (seniorParents) =>
-        seniorParents
-          ? DEDUCTION_LIMITS.section80DSeniorParents
-          : DEDUCTION_LIMITS.section80DParents,
-    },
-  ],
-}
-
-const ALL_GROUPS = [...INCOME_GROUPS, DEDUCTION_GROUP]
-
-const FIELD_KEYS = ALL_GROUPS.flatMap((group) =>
-  group.fields.map((field) => field.key),
-)
-
-const EMPTY_FORM = Object.fromEntries(
-  FIELD_KEYS.map((key) => [key, '']),
-) as Record<AmountField, string>
-
-const REGIME_LABEL: Record<TaxRegime, string> = {
-  new: 'New regime',
-  old: 'Old regime',
-}
-
-const currencyFormatter = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-})
-
-const groupFormatter = new Intl.NumberFormat('en-IN', {
-  maximumFractionDigits: 0,
-})
-
-const formatCurrency = (value: number) =>
-  currencyFormatter.format(Math.round(value))
-
-const formatPercent = (fraction: number) =>
-  `${(fraction * 100).toFixed(fraction >= 0.1 ? 1 : 2)}%`
-
-const formatRate = (rate: number) => `${Math.round(rate * 100)}%`
-
-/** Groups the digits the user has typed, e.g. "1200000" -> "12,00,000". */
-const formatInputValue = (raw: string) => {
-  if (raw === '' || raw === '-') return raw
-  const negative = raw.startsWith('-')
-  const digits = negative ? raw.slice(1) : raw
-  return `${negative ? '-' : ''}${groupFormatter.format(Number(digits))}`
-}
-
-const parseInputValue = (input: string, allowNegative: boolean) => {
-  const negative = allowNegative && input.trimStart().startsWith('-')
-  const digits = input.replace(/\D/g, '').replace(/^0+(?=\d)/, '')
-  if (digits === '') return negative ? '-' : ''
-  return `${negative ? '-' : ''}${digits}`
-}
-
-const slabLabel = (from: number, to: number | null) => {
-  if (to === null) return `Above ${formatCurrency(from)}`
-  if (from === 0) return `Up to ${formatCurrency(to)}`
-  return `${formatCurrency(from)} – ${formatCurrency(to)}`
-}
-
-type BreakdownRow = {
-  label: string
-  value: number
-  /** Shown as a subtraction, e.g. the standard deduction. */
-  negative?: boolean
-  /** Rows that are only meaningful when non-zero. */
-  hideWhenZero?: boolean
-  emphasis?: boolean
-  note?: string
-}
-
-const buildBreakdown = (result: TaxCalculationResult): BreakdownRow[] => [
-  { label: 'Gross total income', value: result.grossTotalIncome },
-  {
-    label: 'Standard deduction',
-    value: result.standardDeduction,
-    negative: true,
-    hideWhenZero: true,
-  },
-  {
-    label: 'Deduction u/s 80C',
-    value: result.deductions.section80C.allowed,
-    negative: true,
-    hideWhenZero: true,
-  },
-  {
-    label: 'Deduction u/s 80D',
-    value: result.deductions.section80D.allowed,
-    negative: true,
-    hideWhenZero: true,
-  },
-  { label: 'Total income', value: result.totalIncome, emphasis: true },
-  { label: 'Tax at slab rates', value: result.tax.slab },
-  {
-    label: 'Tax on long-term capital gain',
-    value: result.tax.longTermCapitalGain,
-    hideWhenZero: true,
-    note: '12.5% · s.112A',
-  },
-  {
-    label: 'Tax on short-term capital gain',
-    value: result.tax.shortTermCapitalGain,
-    hideWhenZero: true,
-    note: '20% · s.111A',
-  },
-  {
-    label: 'Tax on crypto & VDA gain',
-    value: result.tax.cryptoGain,
-    hideWhenZero: true,
-    note: '30% · s.115BBH',
-  },
-  {
-    label: 'Rebate u/s 87A',
-    value: result.rebate87A,
-    negative: true,
-    hideWhenZero: true,
-  },
-  {
-    label: 'Surcharge',
-    value: result.surcharge,
-    hideWhenZero: true,
-    note: formatRate(result.surchargeRate),
-  },
-  {
-    label: 'Marginal relief',
-    value: result.marginalRelief,
-    negative: true,
-    hideWhenZero: true,
-  },
-  {
-    label: 'Health & education cess',
-    value: result.cess,
-    hideWhenZero: true,
-    note: '4%',
-  },
-]
-
 function App() {
   const [regime, setRegime] = useState<TaxRegime>('new')
   const [seniorParents, setSeniorParents] = useState(false)
-  const [form, setForm] = useState<Record<AmountField, string>>(EMPTY_FORM)
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
   const amounts = useMemo(() => {
     const parsed = {} as Record<AmountField, number>
@@ -351,7 +116,7 @@ function App() {
         </div>
         <fieldset className="regime-toggle">
           <legend className="visually-hidden">Tax regime</legend>
-          {(['new', 'old'] as const).map((option) => (
+          {REGIME_OPTIONS.map((option) => (
             <label
               key={option}
               className={option === regime ? 'is-selected' : undefined}
