@@ -28,6 +28,15 @@ export type TaxDataOptionType = {
   cryptoGainIncomeAnnually?: number
   otherIncomeAnnually?: number
   /**
+   * Basic salary plus dearness allowance, which is what rule 2A means by
+   * "salary". Only used to size the HRA exemption.
+   */
+  basicSalaryAnnually?: number
+  /** The HRA component of the salary above, not income on top of it. */
+  hraReceivedAnnually?: number
+  /** Rent actually paid, for the section 10(13A) exemption. */
+  rentPaidAnnually?: number
+  /**
    * Section 37 expenses of earning the trading income above — brokerage, the
    * GST charged on it, data subscriptions. Allowed under both regimes.
    */
@@ -38,6 +47,8 @@ export type TaxDataOptionType = {
   section80DSelfFamilyAnnually?: number
   /** Section 80D health premium for parents. */
   section80DParentsAnnually?: number
+  /** Section 80CCD(1B) NPS, which sits outside the 80CCE ₹1,50,000 pool. */
+  section80CCD1BAnnually?: number
   /** Section 80E interest on an education loan. No monetary ceiling. */
   section80EAnnually?: number
   /** Section 80G donations deductible in full, with no qualifying limit. */
@@ -48,6 +59,8 @@ export type TaxDataOptionType = {
   homeLoanInterestAnnually?: number
   /** Raises the 80D parents sub-limit from ₹25,000 to ₹50,000. */
   parentsAreSeniorCitizens?: boolean
+  /** Raises the HRA salary test from 40% to 50%. */
+  livesInMetroCity?: boolean
 }
 
 export type TaxRegime = TaxDataOptionType['taxRegime']
@@ -71,9 +84,36 @@ export type DeductionSummary = {
   limit: number
 }
 
+/**
+ * Section 10(13A) read with rule 2A. The exemption is the least of three
+ * tests, all of which are reported so the UI can show which one bit.
+ */
+export type HraSummary = {
+  /** HRA received, as entered. */
+  received: number
+  /** Basic salary plus DA, clamped to the salary entered. */
+  basicSalary: number
+  rentPaid: number
+  /** True when the 50% metro test applies instead of 40%. */
+  metro: boolean
+  /** The share of basic that applied, so the UI need not restate the statute. */
+  salaryShareRate: number
+  tests: {
+    received: number
+    /** 50% of basic in a metro city, 40% elsewhere. */
+    salaryShare: number
+    /** Rent paid less 10% of basic. */
+    rentOverThreshold: number
+  }
+  /** The least of the three. Always zero under the new regime. */
+  exempt: number
+}
+
 export type TaxCalculationResult = {
   taxRegime: TaxRegime
   grossTotalIncome: number
+  /** Section 10(13A) HRA exemption, taken off salary before everything else. */
+  hra: HraSummary
   standardDeduction: number
   /**
    * Section 37 expenses netted off business income. Allowed under both
@@ -88,6 +128,8 @@ export type TaxCalculationResult = {
   homeLoanInterest: DeductionSummary
   deductions: {
     section80C: DeductionSummary
+    /** NPS, on top of 80C rather than inside its ₹1,50,000 pool. */
+    section80CCD1B: DeductionSummary
     section80D: DeductionSummary
     /** Education-loan interest, which has no ceiling — `limit` is Infinity. */
     section80E: DeductionSummary
@@ -97,7 +139,7 @@ export type TaxCalculationResult = {
      * category is not capped at all.
      */
     section80G: DeductionSummary
-    /** Allowed 80C + 80D + 80E + 80G. Always zero under the new regime. */
+    /** Everything allowed above. Always zero under the new regime. */
     total: number
   }
   /**
@@ -182,8 +224,18 @@ const SLABS: Record<TaxRegime, { upTo: number; rate: number }[]> = {
 
 const STANDARD_DEDUCTION: Record<TaxRegime, number> = { new: 75000, old: 50000 }
 
-/** Section 80C ceiling. */
+/** Section 80C ceiling — the section 80CCE pool, which 80CCD(1B) sits outside. */
 const SECTION_80C_LIMIT = 150000
+
+/** Section 80CCD(1B): additional NPS, over and above the 80CCE pool. */
+const SECTION_80CCD_1B_LIMIT = 50000
+
+/**
+ * Section 10(13A) with rule 2A. "Salary" throughout means basic plus DA, not
+ * gross pay, which is why the form asks for basic separately.
+ */
+const HRA_SALARY_SHARE = { metro: 0.5, nonMetro: 0.4 }
+const HRA_RENT_THRESHOLD = 0.1
 
 /**
  * Section 80D sub-limits. `self` assumes the taxpayer is under 60, matching the
@@ -213,6 +265,7 @@ const HOME_LOAN_INTEREST_LIMIT = 200000
 /** Published so the UI can label each field without restating the numbers. */
 export const DEDUCTION_LIMITS = {
   section80C: SECTION_80C_LIMIT,
+  section80CCD1B: SECTION_80CCD_1B_LIMIT,
   section80DSelfFamily: SECTION_80D_LIMITS.self,
   section80DParents: SECTION_80D_LIMITS.parents,
   section80DSeniorParents: SECTION_80D_LIMITS.seniorParents,
@@ -382,6 +435,53 @@ const reduceIncomeTo = (
 }
 
 /**
+ * Section 10(13A) with rule 2A: the exemption is the least of the HRA
+ * received, a share of basic salary, and rent paid over 10% of basic. All
+ * three are reported so the UI can show which one bound.
+ *
+ * Basic is clamped to the gross salary entered — an inflated basic would
+ * otherwise let the percentage tests exempt more than was ever earned.
+ */
+const computeHra = (
+  data: TaxDataOptionType,
+  regime: TaxRegime,
+  salary: number,
+): HraSummary => {
+  const basicSalary = Math.min(
+    atLeastZero(num(data.basicSalaryAnnually)),
+    atLeastZero(salary),
+  )
+  const received = Math.min(
+    atLeastZero(num(data.hraReceivedAnnually)),
+    atLeastZero(salary),
+  )
+  const rentPaid = atLeastZero(num(data.rentPaidAnnually))
+  const metro = data.livesInMetroCity === true
+  const salaryShareRate = metro
+    ? HRA_SALARY_SHARE.metro
+    : HRA_SALARY_SHARE.nonMetro
+
+  const tests = {
+    received,
+    salaryShare: round2(basicSalary * salaryShareRate),
+    rentOverThreshold: round2(
+      atLeastZero(rentPaid - basicSalary * HRA_RENT_THRESHOLD),
+    ),
+  }
+
+  return {
+    received,
+    basicSalary,
+    rentPaid,
+    metro,
+    salaryShareRate,
+    tests,
+    // The new regime withdraws 10(13A) outright (s.115BAC).
+    exempt: regime === 'old' ? Math.min(...Object.values(tests)) : 0,
+  }
+}
+
+/**
  * Chapter VI-A deductions. The new regime allows none of these sections, so
  * every limit collapses to zero and the claimed amounts are reported back
  * unchanged so the UI can still show what was forgone by choosing it.
@@ -396,6 +496,7 @@ const computeDeductions = (
   incomeBeforeChapterVIA: number,
 ): TaxCalculationResult['deductions'] => {
   const claimed80C = atLeastZero(num(data.section80CAnnually))
+  const claimed80CCD1B = atLeastZero(num(data.section80CCD1BAnnually))
   const claimedSelf = atLeastZero(num(data.section80DSelfFamilyAnnually))
   const claimedParents = atLeastZero(num(data.section80DParentsAnnually))
   const claimed80D = claimedSelf + claimedParents
@@ -407,6 +508,7 @@ const computeDeductions = (
   if (regime === 'new') {
     return {
       section80C: { claimed: claimed80C, allowed: 0, limit: 0 },
+      section80CCD1B: { claimed: claimed80CCD1B, allowed: 0, limit: 0 },
       section80D: { claimed: claimed80D, allowed: 0, limit: 0 },
       section80E: { claimed: claimed80E, allowed: 0, limit: 0 },
       section80G: { claimed: claimed80G, allowed: 0, limit: 0 },
@@ -421,6 +523,9 @@ const computeDeductions = (
     : SECTION_80D_LIMITS.parents
 
   const allowed80C = Math.min(claimed80C, SECTION_80C_LIMIT)
+  // Deliberately not pooled with 80C: section 80CCE excludes 80CCD(1B) from
+  // the ₹1,50,000 ceiling, which is the whole point of the sub-section.
+  const allowed80CCD1B = Math.min(claimed80CCD1B, SECTION_80CCD_1B_LIMIT)
   const allowed80D =
     Math.min(claimedSelf, SECTION_80D_LIMITS.self) +
     Math.min(claimedParents, parentsLimit)
@@ -431,7 +536,13 @@ const computeDeductions = (
   // income, i.e. gross total income less the other chapter VI-A deductions and
   // less income taxed at special rates — which slab income already excludes.
   const adjustedGrossTotalIncome = atLeastZero(
-    round2(incomeBeforeChapterVIA - allowed80C - allowed80D - allowed80E),
+    round2(
+      incomeBeforeChapterVIA -
+        allowed80C -
+        allowed80CCD1B -
+        allowed80D -
+        allowed80E,
+    ),
   )
   const qualifyingLimit = round2(
     adjustedGrossTotalIncome * SECTION_80G_QUALIFYING_RATE,
@@ -446,6 +557,11 @@ const computeDeductions = (
       claimed: claimed80C,
       allowed: allowed80C,
       limit: SECTION_80C_LIMIT,
+    },
+    section80CCD1B: {
+      claimed: claimed80CCD1B,
+      allowed: allowed80CCD1B,
+      limit: SECTION_80CCD_1B_LIMIT,
     },
     section80D: {
       claimed: claimed80D,
@@ -462,7 +578,9 @@ const computeDeductions = (
       allowed: allowed80G,
       limit: qualifyingLimit,
     },
-    total: round2(allowed80C + allowed80D + allowed80E + allowed80G),
+    total: round2(
+      allowed80C + allowed80CCD1B + allowed80D + allowed80E + allowed80G,
+    ),
   }
 }
 
@@ -492,9 +610,15 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
     salary + otherSlabIncome + ltcg + stcg + crypto,
   )
 
+  // Section 10(13A) is an exemption rather than a deduction, so it comes off
+  // salary before anything else — including the standard deduction, which
+  // applies to what is left of the salary head.
+  const hra = computeHra(data, regime, salary)
+  const salaryAfterExemption = atLeastZero(round2(salary - hra.exempt))
+
   // The standard deduction is only available against salary income.
   const standardDeduction = Math.min(
-    atLeastZero(salary),
+    salaryAfterExemption,
     STANDARD_DEDUCTION[regime],
   )
 
@@ -529,7 +653,7 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
 
   const incomeBeforeChapterVIA = atLeastZero(
     round2(
-      salary -
+      salaryAfterExemption -
         standardDeduction +
         otherSlabIncome -
         businessExpenses.allowed -
@@ -626,6 +750,7 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
   return {
     taxRegime: regime,
     grossTotalIncome,
+    hra,
     standardDeduction,
     businessExpenses,
     homeLoanInterest,

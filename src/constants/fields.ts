@@ -1,4 +1,5 @@
-import type { FieldGroup, FormState } from '../interfaces'
+import type { FieldGroup, FlagState, FormState } from '../interfaces'
+import { formatCurrency } from '../utils/common'
 import { DEDUCTION_LIMITS } from '../utils/tax'
 
 export const INCOME_GROUPS: FieldGroup[] = [
@@ -82,9 +83,49 @@ export const INCOME_GROUPS: FieldGroup[] = [
 
 export const DEDUCTION_GROUPS: FieldGroup[] = [
   {
+    title: 'House rent allowance — section 10(13A)',
+    regimes: ['old'],
+    note: {
+      new: 'The new regime withdraws the HRA exemption altogether.',
+      old: 'The exemption is the least of three tests, so all three figures are needed. It comes off your salary before anything else.',
+    },
+    toggles: [
+      {
+        key: 'livesInMetroCity',
+        label: 'I live in a metro city',
+        hint: 'Delhi, Mumbai, Kolkata or Chennai. Raises the salary test from 40% to 50% of basic.',
+      },
+    ],
+    fields: [
+      {
+        key: 'basicSalaryAnnually',
+        label: 'Basic salary + DA',
+        hint: 'Rule 2A means basic pay plus dearness allowance by “salary”, not your gross pay — every test below is a percentage of this figure.',
+      },
+      {
+        key: 'hraReceivedAnnually',
+        label: 'HRA received',
+        hint: 'The house-rent allowance in your pay structure. It is already inside the salary you entered above, so it is not counted as income twice.',
+      },
+      {
+        key: 'rentPaidAnnually',
+        label: 'Rent paid',
+        hint: 'Rent you actually paid for the year. Nothing is exempt unless it exceeds 10% of your basic salary.',
+      },
+    ],
+  },
+  {
     title: 'Deductions — chapter VI-A',
     regimes: ['old'],
-    showSeniorParentsToggle: true,
+    toggles: [
+      {
+        key: 'parentsAreSeniorCitizens',
+        label: 'My parents are 60 or older',
+        hint: `Raises the 80D parents limit from ${formatCurrency(
+          DEDUCTION_LIMITS.section80DParents,
+        )} to ${formatCurrency(DEDUCTION_LIMITS.section80DSeniorParents)}.`,
+      },
+    ],
     note: {
       new: 'The new regime allows no chapter VI-A deduction. Anything you enter here is kept and applied the moment you switch to the old regime.',
       old: 'Deductions reduce salary, interest and business income only — they cannot be set off against capital gains or crypto.',
@@ -97,6 +138,12 @@ export const DEDUCTION_GROUPS: FieldGroup[] = [
         getLimit: () => DEDUCTION_LIMITS.section80C,
       },
       {
+        key: 'section80CCD1BAnnually',
+        label: 'Section 80CCD(1B) — NPS',
+        hint: 'Your own contribution to the National Pension System, on top of the 80C ceiling rather than inside it. Employer contributions belong to 80CCD(2), which is not modelled.',
+        getLimit: () => DEDUCTION_LIMITS.section80CCD1B,
+      },
+      {
         key: 'section80DSelfFamilyAnnually',
         label: 'Section 80D — self, spouse & children',
         hint: 'Health-insurance premium for your own family, including up to ₹5,000 of preventive health check-ups.',
@@ -106,8 +153,8 @@ export const DEDUCTION_GROUPS: FieldGroup[] = [
         key: 'section80DParentsAnnually',
         label: 'Section 80D — parents',
         hint: 'Health-insurance premium paid for your parents, whether or not they are dependent on you.',
-        getLimit: ({ seniorParents }) =>
-          seniorParents
+        getLimit: ({ flags }) =>
+          flags.parentsAreSeniorCitizens
             ? DEDUCTION_LIMITS.section80DSeniorParents
             : DEDUCTION_LIMITS.section80DParents,
       },
@@ -154,7 +201,15 @@ export const FIELD_KEYS = ALL_GROUPS.flatMap((group) =>
   group.fields.map((field) => field.key),
 )
 
+const TOGGLE_KEYS = ALL_GROUPS.flatMap((group) =>
+  (group.toggles ?? []).map((toggle) => toggle.key),
+)
+
 /** Blank value for every field, used as the initial and reset form state. */
 export const EMPTY_FORM = Object.fromEntries(
   FIELD_KEYS.map((key) => [key, '']),
 ) as FormState
+
+export const EMPTY_FLAGS = Object.fromEntries(
+  TOGGLE_KEYS.map((key) => [key, false]),
+) as FlagState

@@ -17,13 +17,21 @@ export type AmountField = {
     : never
 }[keyof TaxDataOptionType]
 
+/** The calculator's yes/no inputs, rendered as checkboxes. */
+export type BooleanField = {
+  [K in keyof TaxDataOptionType]-?: TaxDataOptionType[K] extends
+    boolean | undefined
+    ? K
+    : never
+}[keyof TaxDataOptionType]
+
 /**
  * What a field needs to work out its ceiling. Some are fixed by statute, but
  * 80G's qualifying limit and the cap on business expenses both fall out of the
  * calculation itself, so the whole result is on offer.
  */
 export type LimitContext = {
-  seniorParents: boolean
+  flags: FlagState
   result: TaxCalculationResult
 }
 
@@ -43,15 +51,22 @@ export type FieldConfig = {
   limitLabel?: string
 }
 
+export type ToggleConfig = {
+  key: BooleanField
+  label: string
+  /** What turning it on changes, shown beneath the label. */
+  hint: string
+}
+
 export type FieldGroup = {
   title: string
   fields: FieldConfig[]
+  /** Checkboxes rendered after the fields. */
+  toggles?: ToggleConfig[]
   /** Shown under the legend, worded per regime. */
   note?: Record<TaxRegime, string>
   /** Regimes where the group does anything. Undefined means both. */
   regimes?: TaxRegime[]
-  /** Renders the "my parents are 60 or older" toggle after the fields. */
-  showSeniorParentsToggle?: boolean
 }
 
 /** A single line of the tax breakdown shown beside the form. */
@@ -68,6 +83,9 @@ export type BreakdownRow = {
 
 /** The form's raw text state: digits as typed, before parsing to numbers. */
 export type FormState = Record<AmountField, string>
+
+/** The form's checkbox state. */
+export type FlagState = Record<BooleanField, boolean>
 
 export type Theme = 'light' | 'dark'
 

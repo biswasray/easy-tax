@@ -12,6 +12,13 @@ export const buildBreakdown = (
 ): BreakdownRow[] => [
   { label: 'Gross total income', value: result.grossTotalIncome },
   {
+    label: 'HRA exempt',
+    value: result.hra.exempt,
+    negative: true,
+    hideWhenZero: true,
+    note: 's.10(13A)',
+  },
+  {
     label: 'Standard deduction',
     value: result.standardDeduction,
     negative: true,
@@ -36,6 +43,13 @@ export const buildBreakdown = (
     value: result.deductions.section80C.allowed,
     negative: true,
     hideWhenZero: true,
+  },
+  {
+    label: 'Deduction u/s 80CCD(1B)',
+    value: result.deductions.section80CCD1B.allowed,
+    negative: true,
+    hideWhenZero: true,
+    note: 'NPS',
   },
   {
     label: 'Deduction u/s 80D',

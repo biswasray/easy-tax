@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ThemeToggle } from './components'
 import {
   DEDUCTION_GROUPS,
+  EMPTY_FLAGS,
   EMPTY_FORM,
   FIELD_KEYS,
   INCOME_GROUPS,
@@ -12,12 +13,12 @@ import type {
   AmountField,
   FieldConfig,
   FieldGroup,
+  FlagState,
   FormState,
 } from './interfaces'
 import {
   buildBreakdown,
   calculateTax,
-  DEDUCTION_LIMITS,
   formatCurrency,
   formatInputValue,
   formatFinancialYear,
@@ -38,7 +39,7 @@ const currentFinancialYear = getFinancialYearStart()
 
 function App() {
   const [regime, setRegime] = useState<TaxRegime>('new')
-  const [seniorParents, setSeniorParents] = useState(false)
+  const [flags, setFlags] = useState<FlagState>(EMPTY_FLAGS)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
   const amounts = useMemo(() => {
@@ -50,10 +51,7 @@ function App() {
     return parsed
   }, [form])
 
-  const input = useMemo(
-    () => ({ ...amounts, parentsAreSeniorCitizens: seniorParents }),
-    [amounts, seniorParents],
-  )
+  const input = useMemo(() => ({ ...amounts, ...flags }), [amounts, flags])
 
   const result = useMemo(
     () => calculateTax({ ...input, taxRegime: regime }),
@@ -69,12 +67,14 @@ function App() {
   const hasIncome = result.grossTotalIncome > 0
   const saving = alternate.totalTaxPayable - result.totalTaxPayable
   const breakdown = buildBreakdown(result)
-  // What the new regime turns away: chapter VI-A and the 24(b) interest. Taken
-  // from the old-regime run rather than from what was typed, so the figure is
-  // what you would actually be allowed, not what you claimed.
+  // What the new regime turns away: HRA, chapter VI-A and the 24(b) interest.
+  // Taken from the old-regime run rather than from what was typed, so the
+  // figure is what you would actually be allowed, not what you claimed.
   const forgoneDeductions =
     regime === 'new'
-      ? alternate.deductions.total + alternate.homeLoanInterest.allowed
+      ? alternate.hra.exempt +
+        alternate.deductions.total +
+        alternate.homeLoanInterest.allowed
       : 0
 
   const updateField = (field: FieldConfig, value: string) => {
@@ -91,9 +91,7 @@ function App() {
   const renderField = (field: FieldConfig, active = true) => {
     // A cap is only worth showing where the field does something. Where the
     // regime disallows it outright, a limit would contradict the note.
-    const limit = active
-      ? field.getLimit?.({ seniorParents, result })
-      : undefined
+    const limit = active ? field.getLimit?.({ flags, result }) : undefined
     const excess = limit === undefined ? undefined : amounts[field.key] - limit
 
     return (
@@ -196,28 +194,24 @@ function App() {
                   <p className="group-note">{group.note[regime]}</p>
                 )}
                 {group.fields.map((field) => renderField(field, active))}
-                {group.showSeniorParentsToggle && (
-                  <label className="checkbox">
+                {group.toggles?.map((toggle) => (
+                  <label key={toggle.key} className="checkbox">
                     <input
                       type="checkbox"
-                      checked={seniorParents}
+                      checked={flags[toggle.key]}
                       onChange={(event) =>
-                        setSeniorParents(event.target.checked)
+                        setFlags((current) => ({
+                          ...current,
+                          [toggle.key]: event.target.checked,
+                        }))
                       }
                     />
                     <span>
-                      My parents are 60 or older
-                      <span className="hint">
-                        Raises the 80D parents limit from{' '}
-                        {formatCurrency(DEDUCTION_LIMITS.section80DParents)} to{' '}
-                        {formatCurrency(
-                          DEDUCTION_LIMITS.section80DSeniorParents,
-                        )}
-                        .
-                      </span>
+                      {toggle.label}
+                      <span className="hint">{toggle.hint}</span>
                     </span>
                   </label>
-                )}
+                ))}
               </fieldset>
             )
           })}
@@ -227,7 +221,7 @@ function App() {
             className="reset"
             onClick={() => {
               setForm(EMPTY_FORM)
-              setSeniorParents(false)
+              setFlags(EMPTY_FLAGS)
             }}
           >
             Reset all
@@ -275,9 +269,10 @@ function App() {
 
           {forgoneDeductions > 0 && (
             <p className="notice">
-              {formatCurrency(forgoneDeductions)} of deductions is being ignored
-              because the new regime allows neither chapter VI-A nor the
-              home-loan interest. Business expenses still count.
+              {formatCurrency(forgoneDeductions)} of exemptions and deductions
+              is being ignored because the new regime allows none of HRA,
+              chapter VI-A or the home-loan interest. Business expenses still
+              count.
             </p>
           )}
 
@@ -306,6 +301,16 @@ function App() {
                 <dd>{formatCurrency(result.totalTaxPayable)}</dd>
               </div>
             </dl>
+            {result.hra.exempt > 0 && (
+              <p className="footnote">
+                The HRA exemption is the least of{' '}
+                {formatCurrency(result.hra.tests.received)} received,{' '}
+                {formatCurrency(result.hra.tests.salaryShare)} (
+                {formatRate(result.hra.salaryShareRate)} of basic salary) and{' '}
+                {formatCurrency(result.hra.tests.rentOverThreshold)} of rent
+                paid over 10% of basic.
+              </p>
+            )}
             {result.basicExemptionUsedAgainstSpecialIncome > 0 && (
               <p className="footnote">
                 {formatCurrency(result.basicExemptionUsedAgainstSpecialIncome)}{' '}
