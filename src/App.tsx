@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
 import { ThemeToggle } from './components'
 import {
-  DEDUCTION_GROUP,
+  DEDUCTION_GROUPS,
   EMPTY_FORM,
   FIELD_KEYS,
   INCOME_GROUPS,
   REGIME_LABEL,
   REGIME_OPTIONS,
 } from './constants'
-import type { AmountField, FieldConfig, FormState } from './interfaces'
+import type {
+  AmountField,
+  FieldConfig,
+  FieldGroup,
+  FormState,
+} from './interfaces'
 import {
   buildBreakdown,
   calculateTax,
@@ -64,9 +69,13 @@ function App() {
   const hasIncome = result.grossTotalIncome > 0
   const saving = alternate.totalTaxPayable - result.totalTaxPayable
   const breakdown = buildBreakdown(result)
-  const { section80C, section80D } = result.deductions
+  // What the new regime turns away: chapter VI-A and the 24(b) interest. Taken
+  // from the old-regime run rather than from what was typed, so the figure is
+  // what you would actually be allowed, not what you claimed.
   const forgoneDeductions =
-    regime === 'new' ? section80C.claimed + section80D.claimed : 0
+    regime === 'new'
+      ? alternate.deductions.total + alternate.homeLoanInterest.allowed
+      : 0
 
   const updateField = (field: FieldConfig, value: string) => {
     setForm((current) => ({
@@ -75,10 +84,16 @@ function App() {
     }))
   }
 
-  const renderField = (field: FieldConfig) => {
-    // Caps are only worth showing in the old regime. Under the new regime the
-    // section is disallowed outright, so a limit would contradict the note.
-    const limit = regime === 'old' ? field.getLimit?.(seniorParents) : undefined
+  /** A group's fields are live unless the group is scoped to the other regime. */
+  const isActive = (group: FieldGroup) =>
+    group.regimes === undefined || group.regimes.includes(regime)
+
+  const renderField = (field: FieldConfig, active = true) => {
+    // A cap is only worth showing where the field does something. Where the
+    // regime disallows it outright, a limit would contradict the note.
+    const limit = active
+      ? field.getLimit?.({ seniorParents, result })
+      : undefined
     const excess = limit === undefined ? undefined : amounts[field.key] - limit
 
     return (
@@ -101,8 +116,10 @@ function App() {
         {limit !== undefined && (
           <p className={`limit${excess && excess > 0 ? ' is-exceeded' : ''}`}>
             {excess && excess > 0
-              ? `${formatCurrency(excess)} over the ${formatCurrency(limit)} limit is not counted.`
-              : `Limit ${formatCurrency(limit)}.`}
+              ? `${formatCurrency(excess)} over the ${formatCurrency(limit)} ${field.limitLabel ?? 'limit'} is not counted.`
+              : field.limitLabel
+                ? `Capped at your ${formatCurrency(limit)} ${field.limitLabel}.`
+                : `Limit ${formatCurrency(limit)}.`}
           </p>
         )}
       </div>
@@ -159,38 +176,51 @@ function App() {
           {INCOME_GROUPS.map((group) => (
             <fieldset key={group.title} className="income-group">
               <legend>{group.title}</legend>
-              {group.fields.map(renderField)}
+              {/* Not point-free: map would pass the index as `active`. */}
+              {group.fields.map((field) => renderField(field))}
             </fieldset>
           ))}
 
-          <fieldset
-            className={`income-group deduction-group${
-              regime === 'new' ? ' is-inactive' : ''
-            }`}
-          >
-            <legend>{DEDUCTION_GROUP.title}</legend>
-            <p className="group-note">
-              {regime === 'new'
-                ? 'The new regime does not allow 80C or 80D. Anything you enter here is kept and applied the moment you switch to the old regime.'
-                : 'Deductions reduce salary, interest and business income only — they cannot be set off against capital gains or crypto.'}
-            </p>
-            {DEDUCTION_GROUP.fields.map(renderField)}
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={seniorParents}
-                onChange={(event) => setSeniorParents(event.target.checked)}
-              />
-              <span>
-                My parents are 60 or older
-                <span className="hint">
-                  Raises the 80D parents limit from{' '}
-                  {formatCurrency(DEDUCTION_LIMITS.section80DParents)} to{' '}
-                  {formatCurrency(DEDUCTION_LIMITS.section80DSeniorParents)}.
-                </span>
-              </span>
-            </label>
-          </fieldset>
+          {DEDUCTION_GROUPS.map((group) => {
+            const active = isActive(group)
+
+            return (
+              <fieldset
+                key={group.title}
+                className={`income-group deduction-group${
+                  active ? '' : ' is-inactive'
+                }`}
+              >
+                <legend>{group.title}</legend>
+                {group.note && (
+                  <p className="group-note">{group.note[regime]}</p>
+                )}
+                {group.fields.map((field) => renderField(field, active))}
+                {group.showSeniorParentsToggle && (
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={seniorParents}
+                      onChange={(event) =>
+                        setSeniorParents(event.target.checked)
+                      }
+                    />
+                    <span>
+                      My parents are 60 or older
+                      <span className="hint">
+                        Raises the 80D parents limit from{' '}
+                        {formatCurrency(DEDUCTION_LIMITS.section80DParents)} to{' '}
+                        {formatCurrency(
+                          DEDUCTION_LIMITS.section80DSeniorParents,
+                        )}
+                        .
+                      </span>
+                    </span>
+                  </label>
+                )}
+              </fieldset>
+            )
+          })}
 
           <button
             type="button"
@@ -245,8 +275,9 @@ function App() {
 
           {forgoneDeductions > 0 && (
             <p className="notice">
-              {formatCurrency(forgoneDeductions)} of 80C and 80D deductions is
-              being ignored because the new regime does not allow chapter VI-A.
+              {formatCurrency(forgoneDeductions)} of deductions is being ignored
+              because the new regime allows neither chapter VI-A nor the
+              home-loan interest. Business expenses still count.
             </p>
           )}
 
@@ -319,9 +350,9 @@ function App() {
 
       <footer className="app-footer">
         <p>
-          An estimate only — chapter VI-A deductions, senior-citizen slabs and
-          loss carry-forward are not modelled. Check with a tax professional
-          before you file.
+          An estimate only — HRA, LTA, NPS, let-out property, senior-citizen
+          slabs and loss carry-forward are not modelled. Check with a tax
+          professional before you file.
         </p>
       </footer>
     </div>

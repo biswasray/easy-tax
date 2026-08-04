@@ -1,4 +1,8 @@
-import type { TaxDataOptionType } from '../utils/tax'
+import type {
+  TaxCalculationResult,
+  TaxDataOptionType,
+  TaxRegime,
+} from '../utils/tax'
 
 /**
  * Every amount field on the form, i.e. every key of the calculator input
@@ -13,6 +17,16 @@ export type AmountField = {
     : never
 }[keyof TaxDataOptionType]
 
+/**
+ * What a field needs to work out its ceiling. Some are fixed by statute, but
+ * 80G's qualifying limit and the cap on business expenses both fall out of the
+ * calculation itself, so the whole result is on offer.
+ */
+export type LimitContext = {
+  seniorParents: boolean
+  result: TaxCalculationResult
+}
+
 export type FieldConfig = {
   key: AmountField
   label: string
@@ -21,12 +35,23 @@ export type FieldConfig = {
   /** Business/other income can be a loss and set off against other income. */
   allowNegative?: boolean
   /** Statutory ceiling, for deduction fields. */
-  getLimit?: (seniorParents: boolean) => number
+  getLimit?: (context: LimitContext) => number
+  /**
+   * Names a ceiling that is not a flat statutory figure, e.g. "business
+   * income". Changes the wording from "Limit ₹X" to "Capped at your ₹X …".
+   */
+  limitLabel?: string
 }
 
 export type FieldGroup = {
   title: string
   fields: FieldConfig[]
+  /** Shown under the legend, worded per regime. */
+  note?: Record<TaxRegime, string>
+  /** Regimes where the group does anything. Undefined means both. */
+  regimes?: TaxRegime[]
+  /** Renders the "my parents are 60 or older" toggle after the fields. */
+  showSeniorParentsToggle?: boolean
 }
 
 /** A single line of the tax breakdown shown beside the form. */

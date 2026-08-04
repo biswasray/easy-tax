@@ -4,9 +4,13 @@
  * Assumptions baked into these rates (documented so they are easy to bump):
  *  - FY 2025-26 / AY 2026-27.
  *  - Resident individual below 60 years of age (no senior-citizen slabs).
- *  - Chapter VI-A deductions are limited to 80C and 80D, and only the old
- *    regime allows them. They reduce slab income only — they can never be set
- *    off against capital gains or crypto taxed at special rates.
+ *  - Chapter VI-A deductions are limited to 80C, 80D, 80E and 80G, and only the
+ *    old regime allows them. So is the section 24(b) home-loan interest. They
+ *    reduce slab income only — none of them can be set off against capital
+ *    gains or crypto taxed at special rates.
+ *  - Section 37 business expenses are the exception: they are a cost of earning
+ *    business income rather than a chapter VI-A deduction, so both regimes
+ *    allow them.
  *  - Losses are not carried forward; a negative bucket only sets off against
  *    other income in the same calculation.
  */
@@ -23,12 +27,25 @@ export type TaxDataOptionType = {
   commodityFnoTradingIncomeAnnually?: number
   cryptoGainIncomeAnnually?: number
   otherIncomeAnnually?: number
+  /**
+   * Section 37 expenses of earning the trading income above — brokerage, the
+   * GST charged on it, data subscriptions. Allowed under both regimes.
+   */
+  businessExpensesAnnually?: number
   /** Section 80C investments and payments. Old regime only. */
   section80CAnnually?: number
   /** Section 80D health premium for self, spouse and children. */
   section80DSelfFamilyAnnually?: number
   /** Section 80D health premium for parents. */
   section80DParentsAnnually?: number
+  /** Section 80E interest on an education loan. No monetary ceiling. */
+  section80EAnnually?: number
+  /** Section 80G donations deductible in full, with no qualifying limit. */
+  section80GFullAnnually?: number
+  /** Section 80G donations deductible at 50%, within the qualifying limit. */
+  section80GHalfAnnually?: number
+  /** Section 24(b) interest on a loan for a self-occupied house. */
+  homeLoanInterestAnnually?: number
   /** Raises the 80D parents sub-limit from ₹25,000 to ₹50,000. */
   parentsAreSeniorCitizens?: boolean
 }
@@ -58,13 +75,35 @@ export type TaxCalculationResult = {
   taxRegime: TaxRegime
   grossTotalIncome: number
   standardDeduction: number
+  /**
+   * Section 37 expenses netted off business income. Allowed under both
+   * regimes, and capped at the business income itself.
+   */
+  businessExpenses: DeductionSummary
+  /**
+   * Section 24(b) interest, set off as a loss from house property. Its `limit`
+   * is zero under the new regime, which allows neither the deduction nor the
+   * set-off.
+   */
+  homeLoanInterest: DeductionSummary
   deductions: {
     section80C: DeductionSummary
     section80D: DeductionSummary
-    /** Allowed 80C + 80D. Always zero under the new regime. */
+    /** Education-loan interest, which has no ceiling — `limit` is Infinity. */
+    section80E: DeductionSummary
+    /**
+     * Donations. `limit` is the qualifying limit — 10% of adjusted gross total
+     * income — which caps the 50% category only; the fully deductible
+     * category is not capped at all.
+     */
+    section80G: DeductionSummary
+    /** Allowed 80C + 80D + 80E + 80G. Always zero under the new regime. */
     total: number
   }
-  /** Gross total income less the standard deduction and chapter VI-A. */
+  /**
+   * Gross total income less the standard deduction, business expenses, the
+   * house-property loss and chapter VI-A.
+   */
   totalIncome: number
   /** Portion of total income taxed at the ordinary slab rates. */
   slabIncome: number
@@ -156,12 +195,29 @@ const SECTION_80D_LIMITS = {
   seniorParents: 50000,
 }
 
+/**
+ * Section 80G: donations in the "with qualifying limit" categories count only
+ * up to this share of adjusted gross total income, and only half of what
+ * qualifies is deductible.
+ */
+const SECTION_80G_QUALIFYING_RATE = 0.1
+const SECTION_80G_HALF_RATE = 0.5
+
+/**
+ * Section 24(b) interest on a self-occupied house. The same figure caps the
+ * house-property loss that section 71(3A) lets you set against other heads, so
+ * one number does for both.
+ */
+const HOME_LOAN_INTEREST_LIMIT = 200000
+
 /** Published so the UI can label each field without restating the numbers. */
 export const DEDUCTION_LIMITS = {
   section80C: SECTION_80C_LIMIT,
   section80DSelfFamily: SECTION_80D_LIMITS.self,
   section80DParents: SECTION_80D_LIMITS.parents,
   section80DSeniorParents: SECTION_80D_LIMITS.seniorParents,
+  section80GQualifyingRate: SECTION_80G_QUALIFYING_RATE,
+  homeLoanInterest: HOME_LOAN_INTEREST_LIMIT,
 } as const
 
 const BASIC_EXEMPTION: Record<TaxRegime, number> = { new: 400000, old: 250000 }
@@ -326,23 +382,34 @@ const reduceIncomeTo = (
 }
 
 /**
- * Chapter VI-A deductions. The new regime allows neither section, so every
- * limit collapses to zero and the claimed amounts are reported back unchanged
- * so the UI can still show what was forgone by choosing it.
+ * Chapter VI-A deductions. The new regime allows none of these sections, so
+ * every limit collapses to zero and the claimed amounts are reported back
+ * unchanged so the UI can still show what was forgone by choosing it.
+ *
+ * `incomeBeforeChapterVIA` is slab income after the standard deduction, the
+ * section 37 expenses and the house-property loss, but before this function's
+ * own deductions. Section 80G needs it to work out its qualifying limit.
  */
 const computeDeductions = (
   data: TaxDataOptionType,
   regime: TaxRegime,
+  incomeBeforeChapterVIA: number,
 ): TaxCalculationResult['deductions'] => {
   const claimed80C = atLeastZero(num(data.section80CAnnually))
   const claimedSelf = atLeastZero(num(data.section80DSelfFamilyAnnually))
   const claimedParents = atLeastZero(num(data.section80DParentsAnnually))
   const claimed80D = claimedSelf + claimedParents
+  const claimed80E = atLeastZero(num(data.section80EAnnually))
+  const claimed80GFull = atLeastZero(num(data.section80GFullAnnually))
+  const claimed80GHalf = atLeastZero(num(data.section80GHalfAnnually))
+  const claimed80G = claimed80GFull + claimed80GHalf
 
   if (regime === 'new') {
     return {
       section80C: { claimed: claimed80C, allowed: 0, limit: 0 },
       section80D: { claimed: claimed80D, allowed: 0, limit: 0 },
+      section80E: { claimed: claimed80E, allowed: 0, limit: 0 },
+      section80G: { claimed: claimed80G, allowed: 0, limit: 0 },
       total: 0,
     }
   }
@@ -357,6 +424,22 @@ const computeDeductions = (
   const allowed80D =
     Math.min(claimedSelf, SECTION_80D_LIMITS.self) +
     Math.min(claimedParents, parentsLimit)
+  // Only the interest is deductible, and there is no ceiling on it.
+  const allowed80E = claimed80E
+
+  // Section 80G(4): the qualifying limit is 10% of adjusted gross total
+  // income, i.e. gross total income less the other chapter VI-A deductions and
+  // less income taxed at special rates — which slab income already excludes.
+  const adjustedGrossTotalIncome = atLeastZero(
+    round2(incomeBeforeChapterVIA - allowed80C - allowed80D - allowed80E),
+  )
+  const qualifyingLimit = round2(
+    adjustedGrossTotalIncome * SECTION_80G_QUALIFYING_RATE,
+  )
+  const allowed80G = round2(
+    claimed80GFull +
+      Math.min(claimed80GHalf, qualifyingLimit) * SECTION_80G_HALF_RATE,
+  )
 
   return {
     section80C: {
@@ -369,7 +452,17 @@ const computeDeductions = (
       allowed: allowed80D,
       limit: SECTION_80D_LIMITS.self + parentsLimit,
     },
-    total: round2(allowed80C + allowed80D),
+    section80E: {
+      claimed: claimed80E,
+      allowed: allowed80E,
+      limit: Number.POSITIVE_INFINITY,
+    },
+    section80G: {
+      claimed: claimed80G,
+      allowed: allowed80G,
+      limit: qualifyingLimit,
+    },
+    total: round2(allowed80C + allowed80D + allowed80E + allowed80G),
   }
 }
 
@@ -384,12 +477,15 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
 
   // Intraday is speculative business income and F&O is non-speculative
   // business income, but both are ultimately taxed at slab rates.
+  const businessIncome =
+    num(data.intradayTradingIncomeAnnually) +
+    num(data.equityFnoTradingIncomeAnnually) +
+    num(data.commodityFnoTradingIncomeAnnually)
+
   const otherSlabIncome =
     dividend +
     num(data.fdInterestIncomeAnnually) +
-    num(data.intradayTradingIncomeAnnually) +
-    num(data.equityFnoTradingIncomeAnnually) +
-    num(data.commodityFnoTradingIncomeAnnually) +
+    businessIncome +
     num(data.otherIncomeAnnually)
 
   const grossTotalIncome = round2(
@@ -402,10 +498,49 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
     STANDARD_DEDUCTION[regime],
   )
 
-  const deductions = computeDeductions(data, regime)
+  /*
+   * Section 37: the cost of earning the trading income — brokerage, exchange
+   * and demat charges, the GST charged on them, data subscriptions. This is a
+   * business expense rather than a chapter VI-A deduction, so unlike
+   * everything below it the new regime allows it too.
+   *
+   * Capped at the business income itself. A business loss cannot be set
+   * against salary (s.71(2A)) and losses are not modelled here, so letting
+   * expenses run past the income they belong to would only overstate relief.
+   */
+  const claimedExpenses = atLeastZero(num(data.businessExpensesAnnually))
+  const expenseLimit = atLeastZero(businessIncome)
+  const businessExpenses: DeductionSummary = {
+    claimed: claimedExpenses,
+    allowed: Math.min(claimedExpenses, expenseLimit),
+    limit: expenseLimit,
+  }
+
+  // Section 24(b): interest on a self-occupied house is a loss under the
+  // house-property head, set off against the rest of your income. The new
+  // regime allows neither the deduction nor the set-off (s.115BAC).
+  const claimedHomeLoan = atLeastZero(num(data.homeLoanInterestAnnually))
+  const homeLoanLimit = regime === 'old' ? HOME_LOAN_INTEREST_LIMIT : 0
+  const homeLoanInterest: DeductionSummary = {
+    claimed: claimedHomeLoan,
+    allowed: Math.min(claimedHomeLoan, homeLoanLimit),
+    limit: homeLoanLimit,
+  }
+
+  const incomeBeforeChapterVIA = atLeastZero(
+    round2(
+      salary -
+        standardDeduction +
+        otherSlabIncome -
+        businessExpenses.allowed -
+        homeLoanInterest.allowed,
+    ),
+  )
+
+  const deductions = computeDeductions(data, regime, incomeBeforeChapterVIA)
 
   const slabIncome = atLeastZero(
-    round2(salary - standardDeduction + otherSlabIncome - deductions.total),
+    round2(incomeBeforeChapterVIA - deductions.total),
   )
 
   const buckets: IncomeBuckets = {
@@ -492,6 +627,8 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
     taxRegime: regime,
     grossTotalIncome,
     standardDeduction,
+    businessExpenses,
+    homeLoanInterest,
     deductions,
     totalIncome,
     slabIncome: buckets.slab,

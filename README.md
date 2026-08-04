@@ -102,17 +102,54 @@ than a bare number, so the UI can show its working.
 
 ### Deductions
 
-| Section                      | Limit                                         |
-| ---------------------------- | --------------------------------------------- |
-| Standard deduction           | ₹75,000 new regime · ₹50,000 old regime       |
-| 80C                          | ₹1,50,000                                     |
-| 80D — self, spouse, children | ₹25,000                                       |
-| 80D — parents                | ₹25,000, or ₹50,000 when they are 60 or older |
+| Deduction                     | Limit                                         | Regime |
+| ----------------------------- | --------------------------------------------- | ------ |
+| Standard deduction            | ₹75,000 new regime · ₹50,000 old regime       | Both   |
+| Business expenses — s.37      | Your business income                          | Both   |
+| 80C                           | ₹1,50,000                                     | Old    |
+| 80D — self, spouse, children  | ₹25,000                                       | Old    |
+| 80D — parents                 | ₹25,000, or ₹50,000 when they are 60 or older | Old    |
+| 80E — education loan interest | No ceiling                                    | Old    |
+| 80G — donations at 100%       | No qualifying limit                           | Old    |
+| 80G — donations at 50%        | 10% of adjusted gross total income            | Old    |
+| 24(b) — home-loan interest    | ₹2,00,000                                     | Old    |
 
-80C and 80D are **old regime only**, and the two 80D sub-limits are separate —
-unused self/family room cannot absorb an overspend on the parents' policy.
-Chapter VI-A deductions reduce slab income only; they can never be set off
-against capital gains or crypto taxed at special rates.
+Everything below the standard deduction reduces slab income only; none of it
+can be set off against capital gains or crypto taxed at special rates. The two
+80D sub-limits are separate, so unused self/family room cannot absorb an
+overspend on the parents' policy.
+
+**80G** models the two common categories. The 100% one — PM National Relief
+Fund, PM CARES, the National Defence Fund — is deductible in full. The 50% one
+covers registered trusts and NGOs: half of what you give is deductible, and
+only the part falling within 10% of your adjusted gross total income, which is
+slab income after the standard deduction, business expenses, the house-property
+loss and the other chapter VI-A deductions. Donations over ₹2,000 paid in cash
+do not qualify, and the calculator takes your word that they were not.
+
+**24(b)** is the interest on a loan for the house you live in, not the
+principal — that belongs in 80C. It becomes a loss from house property and is
+set off against your other income. The ₹2,00,000 ceiling doubles as the section
+71(3A) cap on that set-off, so one figure does for both. The new regime allows
+neither the deduction nor the set-off.
+
+### Expenses and GST
+
+GST is not an income-tax deduction. Paying it on a phone bill or a restaurant
+meal does nothing for your income tax, and there is no field for it.
+
+Where it counts is as a business cost. The GST charged on your brokerage — along
+with the brokerage itself, exchange and demat charges, data feeds and
+subscriptions — is an expense of earning intraday and F&O income, deductible
+under section 37. This one works under **both** regimes, because it is a cost of
+the business rather than a chapter VI-A deduction. Enter the total under
+**Business expenses**.
+
+Two limits apply. Only GST you could not reclaim as input tax credit is a cost
+at all; if you are GST-registered and claimed the credit, leave it out. And the
+deduction stops at your business income, because a business loss cannot be set
+against salary (s.71(2A)) and losses are not modelled here — expenses beyond the
+income they belong to are dropped rather than carried anywhere.
 
 ### And then
 
@@ -149,9 +186,11 @@ today's date and says plainly that the current year's rates are not in yet.
 Other assumptions:
 
 - Resident individual **under 60** — no senior-citizen slabs.
-- Deductions are limited to 80C and 80D. HRA, LTA, 80CCD(1B), 80E, 80G, 24(b)
-  home-loan interest and the rest are not modelled, so the old regime will look
-  worse than it really is if you rely on them.
+- Deductions are limited to those listed above. HRA, LTA, 80CCD(1B) and
+  80CCD(2) NPS, 80TTA savings interest and 80GG rent are not modelled, so the
+  old regime will look worse than it really is if you rely on them.
+- Only a **self-occupied** house is modelled. Rent received, the 30% standard
+  deduction against it and a let-out property's uncapped interest are not.
 - Losses are not carried forward. A negative business or other-income figure
   sets off against other income within the same calculation only, with no
   speculative/non-speculative ring-fencing.

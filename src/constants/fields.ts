@@ -69,38 +69,86 @@ export const INCOME_GROUPS: FieldGroup[] = [
         hint: 'Non-speculative business · slab rates',
         allowNegative: true,
       },
+      {
+        key: 'businessExpensesAnnually',
+        label: 'Business expenses',
+        hint: 'Brokerage, exchange and demat charges, the GST charged on them, internet and data subscriptions — the cost of earning the trading income above. Allowed under both regimes · s.37.',
+        getLimit: ({ result }) => result.businessExpenses.limit,
+        limitLabel: 'business income',
+      },
     ],
   },
 ]
 
-export const DEDUCTION_GROUP: FieldGroup = {
-  title: 'Deductions — chapter VI-A',
-  fields: [
-    {
-      key: 'section80CAnnually',
-      label: 'Section 80C',
-      hint: 'EPF, PPF, ELSS, life-insurance premium, home-loan principal, children’s tuition fees, 5-year FD, Sukanya Samriddhi.',
-      getLimit: () => DEDUCTION_LIMITS.section80C,
+export const DEDUCTION_GROUPS: FieldGroup[] = [
+  {
+    title: 'Deductions — chapter VI-A',
+    regimes: ['old'],
+    showSeniorParentsToggle: true,
+    note: {
+      new: 'The new regime allows no chapter VI-A deduction. Anything you enter here is kept and applied the moment you switch to the old regime.',
+      old: 'Deductions reduce salary, interest and business income only — they cannot be set off against capital gains or crypto.',
     },
-    {
-      key: 'section80DSelfFamilyAnnually',
-      label: 'Section 80D — self, spouse & children',
-      hint: 'Health-insurance premium for your own family, including up to ₹5,000 of preventive health check-ups.',
-      getLimit: () => DEDUCTION_LIMITS.section80DSelfFamily,
+    fields: [
+      {
+        key: 'section80CAnnually',
+        label: 'Section 80C',
+        hint: 'EPF, PPF, ELSS, life-insurance premium, home-loan principal, children’s tuition fees, 5-year FD, Sukanya Samriddhi.',
+        getLimit: () => DEDUCTION_LIMITS.section80C,
+      },
+      {
+        key: 'section80DSelfFamilyAnnually',
+        label: 'Section 80D — self, spouse & children',
+        hint: 'Health-insurance premium for your own family, including up to ₹5,000 of preventive health check-ups.',
+        getLimit: () => DEDUCTION_LIMITS.section80DSelfFamily,
+      },
+      {
+        key: 'section80DParentsAnnually',
+        label: 'Section 80D — parents',
+        hint: 'Health-insurance premium paid for your parents, whether or not they are dependent on you.',
+        getLimit: ({ seniorParents }) =>
+          seniorParents
+            ? DEDUCTION_LIMITS.section80DSeniorParents
+            : DEDUCTION_LIMITS.section80DParents,
+      },
+      {
+        key: 'section80EAnnually',
+        label: 'Section 80E — education loan interest',
+        hint: 'Interest on a loan for higher education, for you, your spouse or your children. No ceiling — but only the interest counts, never the principal, and only for eight years from the first repayment.',
+      },
+      {
+        key: 'section80GFullAnnually',
+        label: 'Section 80G — donations at 100%',
+        hint: 'Funds deductible in full with no qualifying limit: PM National Relief Fund, PM CARES, the National Defence Fund. Cash gifts over ₹2,000 do not count.',
+      },
+      {
+        key: 'section80GHalfAnnually',
+        label: 'Section 80G — donations at 50%',
+        hint: 'Registered trusts and NGOs. Half of what you give is deductible, and only the part within 10% of your adjusted gross total income. Cash gifts over ₹2,000 do not count.',
+        getLimit: ({ result }) => result.deductions.section80G.limit,
+        limitLabel: 'qualifying limit',
+      },
+    ],
+  },
+  {
+    title: 'Home loan — section 24(b)',
+    regimes: ['old'],
+    note: {
+      new: 'The new regime allows neither the interest deduction nor the set-off against your other income.',
+      old: 'For the house you live in. The loan principal belongs under 80C instead.',
     },
-    {
-      key: 'section80DParentsAnnually',
-      label: 'Section 80D — parents',
-      hint: 'Health-insurance premium paid for your parents, whether or not they are dependent on you.',
-      getLimit: (seniorParents) =>
-        seniorParents
-          ? DEDUCTION_LIMITS.section80DSeniorParents
-          : DEDUCTION_LIMITS.section80DParents,
-    },
-  ],
-}
+    fields: [
+      {
+        key: 'homeLoanInterestAnnually',
+        label: 'Home-loan interest',
+        hint: 'Interest paid on the loan for a self-occupied house. It becomes a loss from house property and is set off against the rest of your income.',
+        getLimit: () => DEDUCTION_LIMITS.homeLoanInterest,
+      },
+    ],
+  },
+]
 
-const ALL_GROUPS = [...INCOME_GROUPS, DEDUCTION_GROUP]
+const ALL_GROUPS = [...INCOME_GROUPS, ...DEDUCTION_GROUPS]
 
 export const FIELD_KEYS = ALL_GROUPS.flatMap((group) =>
   group.fields.map((field) => field.key),
