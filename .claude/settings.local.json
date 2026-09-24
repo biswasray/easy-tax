@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn add *)",
+      "Bash(yarn format *)",
+      "Bash(yarn format:check)",
+      "Bash(yarn lint *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx tsx *)",
+      "Bash(yarn build *)",
+      "PowerShell(yarn build *)"
+    ]
+  }
+}

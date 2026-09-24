@@ -589,8 +589,13 @@ export const calculateTax = (data: TaxDataOptionType): TaxCalculationResult => {
 
   const salary = num(data.salaryIncomeAnnually)
   const dividend = num(data.dividendIncomeAnnually)
-  const ltcg = atLeastZero(num(data.longTermCapitalGainAnnually))
-  const stcg = atLeastZero(num(data.shortTermCapitalGainAnnually))
+  // Capital losses stay within the capital gains head (s.70/s.74): a
+  // short-term loss can absorb short- or long-term gains, a long-term loss
+  // only long-term gains. Crypto losses cannot be set off at all (s.115BBH).
+  const rawLtcg = num(data.longTermCapitalGainAnnually)
+  const rawStcg = num(data.shortTermCapitalGainAnnually)
+  const stcg = atLeastZero(rawStcg)
+  const ltcg = atLeastZero(rawLtcg + Math.min(rawStcg, 0))
   const crypto = atLeastZero(num(data.cryptoGainIncomeAnnually))
 
   // Intraday is speculative business income and F&O is non-speculative
